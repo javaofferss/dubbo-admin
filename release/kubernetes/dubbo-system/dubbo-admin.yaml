@@ -12,6 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+# Run ./deploy.sh with DUBBO_ADMIN_IMAGE set to a fixed image. Do not apply
+# this file directly: the pinned 0.7.0 image predates the session-secret fix.
 
 apiVersion: apps/v1
 kind: Deployment
@@ -41,6 +43,12 @@ spec:
         - name: dubbo-admin
           image: apache/dubbo-admin:0.7.0
           imagePullPolicy: IfNotPresent
+          env:
+            - name: DUBBO_ADMIN_SESSION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: dubbo-admin-auth
+                  key: session-secret
           volumeMounts:
             - mountPath: /etc/dubbo-admin
               name: dubbo-admin-config
@@ -96,7 +104,10 @@ data:
     observability:
       grafana: http://grafana.monitoring.svc:3000
       prometheus: http://prometheus-k8s.monitoring.svc:9090/
+      jaeger: http://jaeger.monitoring.svc:16686
     console:
+      port: 8888
+      ginMode: release
       metricDashboards:
         application: http://grafana.monitoring.svc:3000/d/a0b114ca-edf7-4dfe-ac2c-34a4fc545fed?kiosk=1&theme=light
         instance: http://grafana.monitoring.svc:3000/d/dcf5defe-d198-4704-9edf-6520838880e9?kiosk=1&theme=light
@@ -105,9 +116,19 @@ data:
         application: http://grafana.monitoring.svc:3000/d/e968a89b-f03d-42e3-8ad3-930ae815cb0f?kiosk=1&theme=light
         instance: http://grafana.monitoring.svc:3000/d/f5f48f75-13ec-489b-88ae-635ae38d8618?kiosk=1&theme=light
         service: http://grafana.monitoring.svc:3000/d/b2e178fb-ada3-4d5e-9f54-de99e7f07662?kiosk=1&theme=light
+      logDashboards:
+        application: http://grafana.monitoring.svc:3000/d/dubbo-application-loki-logs/dubbo-application-logs?theme=light
+        instance: http://grafana.monitoring.svc:3000/d/dubbo-instance-loki-logs/dubbo-instance-logs?theme=light
+        trace: http://grafana.monitoring.svc:3000/d/dubbo-application-loki-logs/dubbo-application-logs?theme=light
+        # To select the Elasticsearch provider, replace the three URLs above
+        # with the following dashboards after configuring a Grafana ES datasource:
+        # application: http://grafana.monitoring.svc:3000/d/dubbo-application-elasticsearch-logs/dubbo-application-elasticsearch-logs?theme=light
+        # instance: http://grafana.monitoring.svc:3000/d/dubbo-instance-elasticsearch-logs/dubbo-instance-elasticsearch-logs?theme=light
+        # trace: http://grafana.monitoring.svc:3000/d/dubbo-application-elasticsearch-logs/dubbo-application-elasticsearch-logs?theme=light
       auth:
         user: admin
         password: dubbo@2025
+        # sessionSecret is injected through DUBBO_ADMIN_SESSION_SECRET.
         expirationTime: 3600
     ruleVersioning:
       maxVersionsPerRule: 20

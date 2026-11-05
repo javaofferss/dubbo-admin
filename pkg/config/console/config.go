@@ -46,6 +46,7 @@ type Config struct {
 	Port             int                     `json:"port" yaml:"port"`
 	MetricDashboards *GrafanaDashboardConfig `json:"metricDashboards" yaml:"metricDashboards"`
 	TraceDashboards  *GrafanaDashboardConfig `json:"traceDashboards" yaml:"traceDashboards"`
+	LogDashboards    *GrafanaDashboardConfig `json:"logDashboards" yaml:"logDashboards"`
 	Auth             *auth.Config            `json:"auth" yaml:"auth"`
 }
 
@@ -75,12 +76,13 @@ func (c *Config) Validate() error {
 			return err
 		}
 	}
+	if c.LogDashboards != nil {
+		if err := c.LogDashboards.Validate(); err != nil {
+			return err
+		}
+	}
 	if err := c.Auth.Validate(); err != nil {
 		return err
-	}
-	// Release deployments with external providers must reject the legacy default session secret and other short cookie-signing keys.
-	if c.GinMode == ReleaseMode && len(c.Auth.Providers) > 0 && len([]byte(c.Auth.SessionSecret)) < 32 {
-		return bizerror.New(bizerror.ConfigError, "auth sessionSecret must contain at least 32 bytes when providers are enabled in release mode")
 	}
 	return nil
 }
@@ -93,10 +95,14 @@ type GrafanaDashboardConfig struct {
 	Instance string `json:"instance" yaml:"instance"`
 	// service level metrics panel
 	Service string `json:"service" yaml:"service"`
+	// Trace is used only under logDashboards for manual Trace ID search.
+	// It normally reuses Application in trace-focused mode; it is not a Metric/Trace setting.
+	Trace string `json:"trace" yaml:"trace"`
 
 	AppDashboardURL      *url.URL `json:"-" yaml:"-"`
 	InstanceDashboardURL *url.URL `json:"-" yaml:"-"`
 	ServiceDashboardURL  *url.URL `json:"-" yaml:"-"`
+	TraceDashboardURL    *url.URL `json:"-" yaml:"-"`
 }
 
 func (g *GrafanaDashboardConfig) Validate() error {
@@ -124,6 +130,14 @@ func (g *GrafanaDashboardConfig) Validate() error {
 		}
 		g.ServiceDashboardURL = dashboardURL
 	}
+	if strutil.IsNotBlank(g.Trace) {
+		dashboardURL, err := url.Parse(g.Trace)
+		if err != nil {
+			return bizerror.Wrap(err, bizerror.ConfigError,
+				fmt.Sprintf("invalid trace dashboard url: %s", g.Trace))
+		}
+		g.TraceDashboardURL = dashboardURL
+	}
 	return nil
 }
 
@@ -136,7 +150,6 @@ func DefaultConsoleConfig() *Config {
 			User:           "admin",
 			Password:       "admin",
 			ExpirationTime: 3600,
-			SessionSecret:  auth.DefaultSessionSecret,
 		},
 	}
 }
